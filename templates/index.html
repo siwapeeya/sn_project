@@ -2,69 +2,75 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <title>ระบบเรียนรู้ภาษามือ</title>
+    <title>AI Sign Language Serverless</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
-        body { font-family: 'Sarabun', sans-serif; text-align: center; background-color: #f0f2f5; margin: 0; padding: 20px; }
-        .container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
-        .box { background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
-        #video-feed { border: 8px solid #2c3e50; border-radius: 15px; width: 640px; }
-        .star { font-size: 70px; color: #ddd; transition: 0.3s; display: inline-block; }
-        .star.active { color: #f1c40f; transform: scale(1.1); text-shadow: 0 0 15px rgba(241, 196, 15, 0.6); }
-        .status-msg { font-size: 1.4rem; margin-top: 15px; font-weight: bold; color: #34495e; }
-        .conf-badge { font-size: 1.2rem; padding: 5px 15px; border-radius: 50px; background: #ecf0f1; margin-left: 10px; }
-        .target-img { width: 280px; height: 280px; object-fit: cover; border: 5px solid #3498db; border-radius: 20px; margin-bottom: 15px; }
-        .highlight { color: #e67e22; font-size: 1.8rem; }
+        body { font-family: 'Sarabun', sans-serif; text-align: center; background: #f0f2f5; }
+        .box { background: white; padding: 20px; border-radius: 20px; display: inline-block; margin-top: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        #output_canvas { border: 5px solid #2c3e50; border-radius: 15px; width: 640px; height: 480px; }
+        #input_video { display: none; }
+        .result-text { font-size: 2rem; color: #2980b9; font-weight: bold; margin-top: 10px; }
     </style>
 </head>
 <body>
-    <h1>🌟 ระบบประเมินผลการเรียนรู้ภาษามือ AI 🌟</h1>
-    <div class="container">
-        <div class="box">
-            <h3>ทำท่าตามรูปนี้:</h3>
-            <img id="target-image" src="" class="target-img" onerror="this.src='https://via.placeholder.com/280?text=Sign+Language'">
-            <p>โจทย์ปัจจุบัน: <br><b class="highlight" id="target-name">รอสักครู่...</b></p>
-        </div>
-        <div class="box">
-            <img id="video-feed" src="{{ url_for('video_feed') }}">
-            <div id="star-container">
-                <span id="s1" class="star">★</span>
-                <span id="s2" class="star">★</span>
-                <span id="s3" class="star">★</span>
-            </div>
-            <div class="status-msg">
-                ตรวจจับได้: <span id="detected-action" style="color:#2980b9">-</span>
-                <span id="conf-box" class="conf-badge"><span id="conf-percent">0</span>%</span>
-            </div>
-        </div>
+    <h1>🌟 AI ภาษามือ (เครื่องปิดก็รันได้) 🌟</h1>
+    <div class="box">
+        <video id="input_video"></video>
+        <canvas id="output_canvas"></canvas>
+        <div class="result-text">ทายว่า: <span id="word">-</span></div>
+        <div>ความมั่นใจ: <span id="conf">0</span>%</div>
     </div>
 
     <script>
-        async function updateData() {
-            try {
-                const res = await fetch('/get_status');
-                const data = await res.json();
-                
-                // อัปเดตตัวหนังสือ
-                document.getElementById('detected-action').innerText = data.detected;
-                document.getElementById('target-name').innerText = data.target;
-                
-                // อัปเดตรูปภาพโจทย์ (ต้องมีรูปใน static/images/ชื่อท่า.jpg)
-                document.getElementById('target-image').src = "/static/images/" + data.target + ".jpg";
-                
-                // อัปเดต % ความมั่นใจ
-                let p = Math.round(data.confidence * 100);
-                document.getElementById('conf-percent').innerText = p;
-                document.getElementById('conf-box').style.color = p > 70 ? '#27ae60' : (p > 40 ? '#f39c12' : '#c0392b');
+        const videoElement = document.getElementById('input_video');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const socket = io();
 
-                // อัปเดตดาว (0-20 แต้ม แบ่งเป็น 3 ดวง)
-                let score = data.score;
-                document.getElementById('s1').classList.toggle('active', score >= 5);
-                document.getElementById('s2').classList.toggle('active', score >= 12);
-                document.getElementById('s3').classList.toggle('active', score >= 19);
-
-            } catch (e) { console.log("Waiting for server..."); }
+        // ฟังก์ชันจัดการดึงพิกัด (เลียนแบบ Logic Python ของแก)
+        function extractKeypoints(results) {
+            const extract = (landmarks, count) => {
+                if (!landmarks) return new Array(count * 3).fill(0);
+                return landmarks.map(l => [l.x, l.y, l.z]).flat();
+            };
+            const lh = extract(results.leftHandLandmarks, 21);
+            const rh = extract(results.rightHandLandmarks, 21);
+            const pose = extract(results.poseLandmarks, 33).slice(0, 99); // เอาแค่ 33 จุดแรก * 3 = 99
+            return [...lh, ...rh, ...pose]; // รวมได้ 225 ค่าพอดี
         }
-        setInterval(updateData, 400); // ดึงข้อมูลทุก 0.4 วินาที
+
+        const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
+        holistic.setOptions({ modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+
+        holistic.onResults((results) => {
+            // 1. วาดเส้น MediaPipe บน Browser (ลื่นปรื๊ด)
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+            drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+            drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#FF0000', lineWidth: 2});
+            drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#0000FF', lineWidth: 2});
+            canvasCtx.restore();
+
+            // 2. ส่งแค่ "ตัวเลขพิกัด" ไป Server (เบามาก)
+            const keypoints = extractKeypoints(results);
+            socket.emit('predict_keypoints', keypoints);
+        });
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => { await holistic.send({image: videoElement}); },
+            width: 640, height: 480
+        });
+        camera.start();
+
+        // รับผลทาย
+        socket.on('response', (data) => {
+            document.getElementById('word').innerText = data.detected;
+            document.getElementById('conf').innerText = (data.confidence * 100).toFixed(2);
+        });
     </script>
 </body>
 </html>
