@@ -1,0 +1,73 @@
+body {
+    font-family: 'Sarabun', sans-serif;
+    background-color: #1a1a2e;
+    color: white;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.container {
+    text-align: center;
+    width: 90%;
+    max-width: 800px;
+}
+
+h1 {
+    color: #00d2ff;
+    text-shadow: 0 0 10px rgba(0,210,255,0.5);
+}
+
+.main-box {
+    background: #16213e;
+    padding: 20px;
+    border-radius: 30px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    border: 2px solid #0f3460;
+}
+
+#output_canvas {
+    width: 100%;
+    max-width: 640px;
+    height: auto;
+    border-radius: 15px;
+    background: #000;
+}
+
+#input_video {
+    display: none;
+}
+
+.info-panel {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 20px;
+    gap: 15px;
+}
+
+.result-card {
+    background: #0f3460;
+    padding: 15px 25px;
+    border-radius: 15px;
+    flex: 1;
+}
+
+.label {
+    display: block;
+    font-size: 0.9rem;
+    color: #999;
+    margin-bottom: 5px;
+}
+
+.value {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: #e94560;
+}
+
+.unit {
+    font-size: 1rem;
+    margin-left: 5px;
+}

@@ -3,74 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <title>AI Sign Language Serverless</title>
+    <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <style>
-        body { font-family: 'Sarabun', sans-serif; text-align: center; background: #f0f2f5; }
-        .box { background: white; padding: 20px; border-radius: 20px; display: inline-block; margin-top: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        #output_canvas { border: 5px solid #2c3e50; border-radius: 15px; width: 640px; height: 480px; }
-        #input_video { display: none; }
-        .result-text { font-size: 2rem; color: #2980b9; font-weight: bold; margin-top: 10px; }
-    </style>
 </head>
 <body>
-    <h1>🌟 AI ภาษามือ (เครื่องปิดก็รันได้) 🌟</h1>
-    <div class="box">
-        <video id="input_video"></video>
-        <canvas id="output_canvas"></canvas>
-        <div class="result-text">ทายว่า: <span id="word">-</span></div>
-        <div>ความมั่นใจ: <span id="conf">0</span>%</div>
+    <div class="container">
+        <h1>🌟 AI Sign Language Recognition 🌟</h1>
+        
+        <div class="main-box">
+            <video id="input_video"></video>
+            <canvas id="output_canvas"></canvas>
+            
+            <div class="info-panel">
+                <div class="result-card">
+                    <span class="label">ทายว่า:</span>
+                    <span id="word" class="value">-</span>
+                </div>
+                <div class="result-card">
+                    <span class="label">ความมั่นใจ:</span>
+                    <span id="conf" class="value">0</span><span class="unit">%</span>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <script>
-        const videoElement = document.getElementById('input_video');
-        const canvasElement = document.getElementById('output_canvas');
-        const canvasCtx = canvasElement.getContext('2d');
-        const socket = io();
-
-        // ฟังก์ชันจัดการดึงพิกัด (เลียนแบบ Logic Python ของแก)
-        function extractKeypoints(results) {
-            const extract = (landmarks, count) => {
-                if (!landmarks) return new Array(count * 3).fill(0);
-                return landmarks.map(l => [l.x, l.y, l.z]).flat();
-            };
-            const lh = extract(results.leftHandLandmarks, 21);
-            const rh = extract(results.rightHandLandmarks, 21);
-            const pose = extract(results.poseLandmarks, 33).slice(0, 99); // เอาแค่ 33 จุดแรก * 3 = 99
-            return [...lh, ...rh, ...pose]; // รวมได้ 225 ค่าพอดี
-        }
-
-        const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({ modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-
-        holistic.onResults((results) => {
-            // 1. วาดเส้น MediaPipe บน Browser (ลื่นปรื๊ด)
-            canvasCtx.save();
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-            drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
-            drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#FF0000', lineWidth: 2});
-            drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#0000FF', lineWidth: 2});
-            canvasCtx.restore();
-
-            // 2. ส่งแค่ "ตัวเลขพิกัด" ไป Server (เบามาก)
-            const keypoints = extractKeypoints(results);
-            socket.emit('predict_keypoints', keypoints);
-        });
-
-        const camera = new Camera(videoElement, {
-            onFrame: async () => { await holistic.send({image: videoElement}); },
-            width: 640, height: 480
-        });
-        camera.start();
-
-        // รับผลทาย
-        socket.on('response', (data) => {
-            document.getElementById('word').innerText = data.detected;
-            document.getElementById('conf').innerText = (data.confidence * 100).toFixed(2);
-        });
-    </script>
+    <script src="/static/js/script.js"></script>
 </body>
 </html>
